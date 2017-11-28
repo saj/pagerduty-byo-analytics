@@ -55,16 +55,19 @@ func main() {
 	}()
 
 	var (
-		incidents = make(chan pagerduty.Incident, 10)
-		done      = make(chan error)
-		w         = bufio.NewWriter(os.Stdout)
+		incidents    = make(chan pagerduty.Incident, 10)
+		producerDone = make(chan error)
+		consumerDone = make(chan struct{})
+		w            = bufio.NewWriter(os.Stdout)
 	)
 	go func() {
-		defer close(done)
-		done <- listIncidents(ctx, *apiKey, window, incidents)
+		defer close(incidents)
+		defer close(producerDone)
+		producerDone <- listIncidents(ctx, *apiKey, window, incidents)
 	}()
 	go func() {
 		defer w.Flush()
+		defer close(consumerDone)
 		for {
 			select {
 			case i, ok := <-incidents:
@@ -85,8 +88,7 @@ func main() {
 		}
 	}()
 	select {
-	case err := <-done:
-		close(incidents)
+	case err := <-producerDone:
 		switch err {
 		case nil:
 		case context.Canceled:
@@ -95,6 +97,7 @@ func main() {
 			log.Fatalf("failed to list incidents: %v", err)
 		}
 	}
+	<-consumerDone
 }
 
 func listIncidents(ctx context.Context, apiKey string, window queryWindow, output chan<- pagerduty.Incident) error {
