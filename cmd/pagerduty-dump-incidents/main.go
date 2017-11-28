@@ -63,32 +63,38 @@ func main() {
 		defer close(done)
 		done <- listIncidents(ctx, *apiKey, window, incidents)
 	}()
-loop:
-	for {
-		select {
-		case i := <-incidents:
-			b, err := json.MarshalIndent(i, "", "  ")
-			if err != nil {
-				log.Fatalf("failed to serialise incident: %v", err)
+	go func() {
+		defer w.Flush()
+		for {
+			select {
+			case i, ok := <-incidents:
+				if !ok {
+					return
+				}
+				b, err := json.MarshalIndent(i, "", "  ")
+				if err != nil {
+					log.Fatalf("failed to serialise incident: %v", err)
+				}
+				if _, err = w.Write(b); err != nil {
+					log.Fatalf("write: %v", err)
+				}
+				if _, err = w.WriteString("\n"); err != nil {
+					log.Fatalf("write: %v", err)
+				}
 			}
-			if _, err = w.Write(b); err != nil {
-				log.Fatalf("write: %v", err)
-			}
-			if _, err = w.WriteString("\n"); err != nil {
-				log.Fatalf("write: %v", err)
-			}
-		case err := <-done:
-			switch err {
-			case nil:
-			case context.Canceled:
-			case context.DeadlineExceeded:
-			default:
-				log.Fatalf("failed to list incidents: %v", err)
-			}
-			break loop
+		}
+	}()
+	select {
+	case err := <-done:
+		close(incidents)
+		switch err {
+		case nil:
+		case context.Canceled:
+		case context.DeadlineExceeded:
+		default:
+			log.Fatalf("failed to list incidents: %v", err)
 		}
 	}
-	w.Flush()
 }
 
 func listIncidents(ctx context.Context, apiKey string, window queryWindow, output chan<- pagerduty.Incident) error {
