@@ -1,0 +1,8 @@
+package: github.com/saj/pagerduty-byo-analytics
+import:
+- package: github.com/PagerDuty/go-pagerduty
+- package: golang.org/x/sys
+  subpackages:
+  - unix
+- package: gopkg.in/alecthomas/kingpin.v2
+  version: ^2.2.5
